@@ -45,9 +45,9 @@ for switch in switch_numbers:
     if switch in correct_values:
         role, mac_address, priority, *_ = lines[int(switch)].split()[1:]
         if role.lower() == correct_values[switch]['role'].lower() and priority == correct_values[switch]['priority']:
-            result = 'PASS'
+            result = f'PASS - Role: {role}, Priority: {priority}'
         else:
-            result = 'FAIL'
+            result = f'FAIL - Expected Role: {correct_values[switch]["role"]}, Priority: {correct_values[switch]["priority"]}. Got Role: {role}, Priority: {priority}'
         results.append(f'Switch {switch}: {result}')
 
 # Save results to file
