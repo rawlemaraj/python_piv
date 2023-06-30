@@ -19,36 +19,41 @@
 
     - name: Parse command output and write results to file
       block:
-        - set_fact:
+        - name: Extract switch details
+          set_fact:
             switch_info: "{{ item.split() }}"
           loop: "{{ result.stdout_lines[0] }}"
           when: item | regex_search('^\*?\d')
-        
-        - set_fact:
-            role: "{{ switch_info[1]|lower }}"
-            priority: "{{ switch_info[3]|lower }}"
-            switch: "{{ switch_info[0]|replace('*','') }}"
-        
-        - name: Check and write to file
+          register: switch_details
+
+        - name: Check each switch
           block:
+            - name: Set facts
+              set_fact:
+                role: "{{ item['ansible_facts']['switch_info'][1]|lower }}"
+                priority: "{{ item['ansible_facts']['switch_info'][3]|lower }}"
+                switch: "{{ item['ansible_facts']['switch_info'][0]|replace('*','') }}"
+              
             - name: Check if role and priority match expected values
               set_fact:
                 result: "PASS - Switch {{ switch }}: Role {{ role }}, Priority {{ priority }}"
               when: role == correct_values[switch]['role'] and priority == correct_values[switch]['priority']
-
-            - name: Write result to file
+            
+            - name: Write pass result to file
               copy:
                 content: "{{ result }}"
                 dest: "/path/to/output.txt"
-          block:
-            - name: Handle case when role and priority do not match expected values
+              when: role == correct_values[switch]['role'] and priority == correct_values[switch]['priority']
+            
+            - name: Check if role and priority do not match expected values
               set_fact:
                 result: "FAIL - Switch {{ switch }}: Expected Role {{ correct_values[switch]['role'] }}, Priority {{ correct_values[switch]['priority'] }}. Got Role {{ role }}, Priority {{ priority }}"
+              when: role != correct_values[switch]['role'] or priority != correct_values[switch]['priority']
             
-            - name: Write result to file
+            - name: Write fail result to file
               copy:
                 content: "{{ result }}"
                 dest: "/path/to/output.txt"
-          when: role != correct_values[switch]['role'] or priority != correct_values[switch]['priority']
-      loop: "{{ result.stdout_lines[0] }}"
+              when: role != correct_values[switch]['role'] or priority != correct_values[switch]['priority']
+          loop: "{{ switch_details.results }}"
       when: result.stdout[0] is search('----')
