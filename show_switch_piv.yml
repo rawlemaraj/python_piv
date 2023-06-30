@@ -1,0 +1,54 @@
+---
+- hosts: cisco
+  gather_facts: no
+  vars:
+    ansible_connection: ansible.netcommon.network_cli
+    ansible_network_os: ansible.netcommon.ios
+    ansible_user: "{{ lookup('env','DEVICE_USERNAME') }}"
+    ansible_password: "{{ lookup('env','DEVICE_PASSWORD') }}"
+    ansible_ssh_pass: "{{ lookup('env','DEVICE_SECRET') }}"
+    correct_values:
+      '1': {'role': 'active', 'priority': '1'}
+      '2': {'role': 'member', 'priority': '1'}
+      '3': {'role': 'standby', 'priority': '1'}
+  tasks:
+    - name: run show switch command
+      ansible.netcommon.cli_command:
+        command: show switch
+      register: result
+
+    - name: Parse command output and write results to file
+      block:
+        - set_fact:
+            switch_info: "{{ item.split() }}"
+          loop: "{{ result.stdout_lines[0] }}"
+          when: item | regex_search('^\*?\d')
+        
+        - set_fact:
+            role: "{{ switch_info[1]|lower }}"
+            priority: "{{ switch_info[3]|lower }}"
+            switch: "{{ switch_info[0]|replace('*','') }}"
+        
+        - name: Check and write to file
+          block:
+            - name: Check if role and priority match expected values
+              set_fact:
+                result: "PASS - Switch {{ switch }}: Role {{ role }}, Priority {{ priority }}"
+              when: role == correct_values[switch]['role'] and priority == correct_values[switch]['priority']
+
+            - name: Write result to file
+              copy:
+                content: "{{ result }}"
+                dest: "/path/to/output.txt"
+          block:
+            - name: Handle case when role and priority do not match expected values
+              set_fact:
+                result: "FAIL - Switch {{ switch }}: Expected Role {{ correct_values[switch]['role'] }}, Priority {{ correct_values[switch]['priority'] }}. Got Role {{ role }}, Priority {{ priority }}"
+            
+            - name: Write result to file
+              copy:
+                content: "{{ result }}"
+                dest: "/path/to/output.txt"
+          when: role != correct_values[switch]['role'] or priority != correct_values[switch]['priority']
+      loop: "{{ result.stdout_lines[0] }}"
+      when: result.stdout[0] is search('----')
