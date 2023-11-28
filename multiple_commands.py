@@ -7,9 +7,20 @@ switches_csv = input("Enter the path to the CSV file with switch hostnames: ")
 commands_csv = input("Enter the path to the CSV file with commands: ")
 output_file = "failed_switches.txt"  # File to store failed switch hostnames
 
-# Prompt for username and password
+# Prompt for username
 username = input("Enter your SSH username: ")
-password = getpass.getpass("Enter your SSH/Enable password: ")
+
+# Prompt for password with verification
+while True:
+    password = getpass.getpass("Enter your SSH/Enable password: ")
+    password_verify = getpass.getpass("Re-enter your password for verification: ")
+    if password == password_verify:
+        break
+    else:
+        print("Passwords do not match. Please try again.")
+
+# Rest of your script remains the same...
+
 
 # List to keep track of failed switches
 failed_switches = []
