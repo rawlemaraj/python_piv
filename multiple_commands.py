@@ -1,39 +1,76 @@
-import pandas as pd
+import csv
+import getpass
+from netmiko import ConnectHandler, NetmikoAuthenticationException, NetmikoTimeoutException
 
-# Step 1: Read from an Excel file from a specific tab
-def read_excel(file_path, sheet_name, column_names):
-    df = pd.read_excel(file_path, sheet_name=sheet_name)
-    return df[column_names]
+# Prompt for file paths
+switches_csv = input("Enter the path to the CSV file with switch hostnames: ")
+commands_csv = input("Enter the path to the CSV file with commands: ")
 
-# Step 2: Create a CSV file with combined data as hostnames
-def create_hostname_csv(data, column_names, output_file):
-    # Combine the columns into one and name it 'Hostname'
-    data['Hostname'] = data[column_names].astype(str).agg(' '.join, axis=1)
-    data[['Hostname']].to_csv(output_file, index=False)
+# Prompt for username and password
+username = input("Enter your SSH username: ")
+password = getpass.getpass("Enter your SSH/Enable password: ")
 
-# Step 3: Read commands from a CSV file
-def read_commands(file_path):
-    df = pd.read_csv(file_path)
-    return df['command'].tolist()  # Assuming 'command' is the column name
+# Function to read hostnames from a CSV file
+def read_hostnames(filename):
+    try:
+        with open(filename, newline='') as file:
+            reader = csv.reader(file)
+            return [row[0] for row in reader]
+    except Exception as e:
+        print(f"Error reading hostnames from {filename}: {e}")
+        return []
 
-# Step 4: Execute commands for each hostname
-def execute_commands(hostnames, commands):
-    for hostname in hostnames:
-        for command in commands:
-            # Here you would replace this print statement with the actual command execution logic
-            print(f"Running command '{command}' on hostname '{hostname}'")
+# Function to read commands from a CSV file
+def read_commands(filename):
+    try:
+        with open(filename, newline='') as file:
+            reader = csv.reader(file)
+            return [row[0] for row in reader]
+    except Exception as e:
+        print(f"Error reading commands from {filename}: {e}")
+        return []
 
-# Main execution
-excel_file_path = 'path_to_your_excel_file.xlsx'
-sheet_name = 'your_sheet_name'  # Replace with your Excel sheet name
-commands_file_path = 'path_to_your_commands_file.csv'
-hostname_csv_output = 'hostnames.csv'
-column_names = ['ColumnA', 'ColumnB']  # Replace with your actual column names
+# Function to connect to a switch and run commands
+def run_commands_on_switch(hostname, commands):
+    device = {
+        'device_type': 'cisco_ios',
+        'host': hostname,
+        'username': username,
+        'password': password,
+        'secret': password  # using the same password for enable mode
+    }
 
-excel_data = read_excel(excel_file_path, sheet_name, column_names)
-create_hostname_csv(excel_data, column_names, hostname_csv_output)
+    try:
+        with ConnectHandler(**device) as connection:
+            print(f"Connected to {hostname}")
+            connection.enable()  # entering enable mode
+            for command in commands:
+                output = connection.send_command(command)
+                print(f'Output for {command} on {hostname}:\n{output}\n')
+    except NetmikoAuthenticationException:
+        print(f"Authentication failed for {hostname}. Check username/password.")
+    except NetmikoTimeoutException:
+        print(f"Connection timed out for {hostname}. Check hostname and network connectivity.")
+    except Exception as e:
+        print(f"An unexpected error occurred with {hostname}: {e}")
 
-hostnames = pd.read_csv(hostname_csv_output)['Hostname'].tolist()
-commands = read_commands(commands_file_path)
+# Main script
+def main():
+    switches = read_hostnames(switches_csv)
+    if not switches:
+        print("No hostnames to process. Exiting.")
+        return
 
-execute_commands(hostnames, commands)
+    commands = read_commands(commands_csv)
+    if not commands:
+        print("No commands to execute. Exiting.")
+        return
+
+    for switch in switches:
+        print(f"Processing {switch}...")
+        run_commands_on_switch(switch, commands)
+
+    print("Script execution completed.")
+
+if __name__ == '__main__':
+    main()
