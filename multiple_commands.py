@@ -1,11 +1,11 @@
 import csv
 import getpass
-from netmiko import ConnectHandler, NetmikoAuthenticationException, NetmikoTimeoutException
+from netmiko import ConnectHandler
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Prompt for file paths
 switches_csv = input("Enter the path to the CSV file with switch hostnames: ")
 commands_csv = input("Enter the path to the CSV file with commands: ")
-output_file = "failed_switches.txt"  # File to store failed switch hostnames
 
 # Prompt for username
 username = input("Enter your SSH username: ")
@@ -18,12 +18,6 @@ while True:
         break
     else:
         print("Passwords do not match. Please try again.")
-
-# Rest of your script remains the same...
-
-
-# List to keep track of failed switches
-failed_switches = []
 
 # Function to read hostnames from a CSV file
 def read_hostnames(filename):
@@ -45,40 +39,27 @@ def read_commands(filename):
         print(f"Error reading commands from {filename}: {e}")
         return []
 
-# Function to connect to a switch and run commands
-def run_commands_on_switch(hostname, commands):
+# Function to connect to a switch and run configuration commands
+def configure_switch(hostname, commands):
     device = {
         'device_type': 'cisco_ios',
         'host': hostname,
         'username': username,
         'password': password,
-        'secret': password,  # using the same password for enable mode
-        'global_delay_factor': 2  # Adjust this as needed
+        'secret': password,
+        'session_log': f'netmiko_session_{hostname}.log'  # Log session details
     }
 
     try:
         with ConnectHandler(**device) as connection:
-            print(f"Connected to {hostname}")
-            connection.enable()  # entering enable mode
-            for command in commands:
-                try:
-                    output = connection.send_command(command, delay_factor=2)  # Adjust delay_factor as needed
-                    print(f'Output for {command} on {hostname}:\n{output}\n')
-                except Exception as cmd_e:
-                    print(f"Error executing command '{command}' on {hostname}: {cmd_e}")
-                    failed_switches.append(hostname)
-                    break  # Stop executing further commands on this switch
+            connection.enable()  # Entering enable mode
+            connection.send_config_set(commands)  # Sending configuration commands
+            connection.save_config()  # Saving the configuration
+            return f"Configuration applied to {hostname}"
     except Exception as e:
-        print(f"Error with {hostname}: {e}")
-        failed_switches.append(hostname)
+        return f"Error with {hostname}: {e}"
 
-# Function to write failed switches to a file
-def write_failed_switches(filename, switches):
-    with open(filename, 'w') as file:
-        for switch in switches:
-            file.write(switch + '\n')
-
-# Main script
+# Main script with multi-threading
 def main():
     switches = read_hostnames(switches_csv)
     if not switches:
@@ -90,13 +71,12 @@ def main():
         print("No commands to execute. Exiting.")
         return
 
-    for switch in switches:
-        print(f"Processing {switch}...")
-        run_commands_on_switch(switch, commands)
+    max_threads = 5  # Adjust the number of threads based on your environment
 
-    if failed_switches:
-        write_failed_switches(output_file, failed_switches)
-        print(f"Failed switches written to {output_file}")
+    with ThreadPoolExecutor(max_workers=max_threads) as executor:
+        futures = {executor.submit(configure_switch, switch, commands): switch for switch in switches}
+        for future in as_completed(futures):
+            print(future.result())
 
     print("Script execution completed.")
 
