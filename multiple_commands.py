@@ -1,61 +1,36 @@
 import pandas as pd
-from netmiko import ConnectHandler, NetMikoTimeoutException, NetMikoAuthenticationException
-from getpass import getpass
 
-def read_devices(file_path):
+# Step 1: Read from an Excel file
+def read_excel(file_path, column_names):
     df = pd.read_excel(file_path)
-    return df['Hostname'].dropna().tolist()
+    return df[column_names]
 
+# Step 2: Create a CSV file with hostnames
+def create_hostname_csv(data, output_file):
+    hostnames = data['hostname'].unique()  # Assuming 'hostname' is one of the columns
+    pd.DataFrame(hostnames, columns=['hostname']).to_csv(output_file, index=False)
+
+# Step 3: Read commands from a CSV file
 def read_commands(file_path):
     df = pd.read_csv(file_path)
-    return df['Command'].dropna().tolist()
+    return df['command'].tolist()  # Assuming 'command' is the column name
 
-def log_error_to_file(message, file_name='error_log.txt'):
-    with open(file_name, 'a') as file:
-        file.write(message + '\n')
+# Step 4: Execute commands for each hostname
+def execute_commands(hostnames, commands):
+    for hostname in hostnames:
+        for command in commands:
+            # Here you would replace this print statement with the actual command execution logic
+            print(f"Running command '{command}' on hostname '{hostname}'")
 
-def connect_and_execute_commands(host, username, password, enable_password, commands):
-    device = {
-        'device_type': 'cisco_ios',  # Change this depending on your device type
-        'host': host,
-        'username': username,
-        'password': password,
-        'secret': enable_password,
-    }
+# Main execution
+excel_file_path = 'path_to_your_excel_file.xlsx'
+commands_file_path = 'path_to_your_commands_file.csv'
+hostname_csv_output = 'hostnames.csv'
 
-    try:
-        with ConnectHandler(**device) as net_connect:
-            net_connect.enable()
-            for command in commands:
-                output = net_connect.send_command(command)
-                print(f"Output from {host} for command '{command}':\n{output}\n")
-    except NetMikoTimeoutException:
-        error_message = f"Connection timed out for device {host}"
-        print(error_message)
-        log_error_to_file(error_message)
-    except NetMikoAuthenticationException:
-        error_message = f"Authentication failed for device {host}"
-        print(error_message)
-        log_error_to_file(error_message)
-    except Exception as e:
-        error_message = f"An error occurred with device {host}: {e}"
-        print(error_message)
-        log_error_to_file(error_message)
+excel_data = read_excel(excel_file_path, ['hostname', 'another_column'])  # Replace 'another_column' as needed
+create_hostname_csv(excel_data, hostname_csv_output)
 
-def main():
-    # User credentials input
-    username = input("Enter your username: ")
-    password = getpass("Enter your password: ")
-    enable_password = getpass("Enter your enable password (leave blank if same as login password): ")
-    enable_password = enable_password or password
+hostnames = pd.read_csv(hostname_csv_output)['hostname'].tolist()
+commands = read_commands(commands_file_path)
 
-    # Read hostnames and commands
-    hostnames = read_devices('hostnames.xlsx')
-    commands = read_commands('commands.csv')
-
-    # Connect to each device and execute commands
-    for host in hostnames:
-        connect_and_execute_commands(host, username, password, enable_password, commands)
-
-if __name__ == "__main__":
-    main()
+execute_commands(hostnames, commands)
