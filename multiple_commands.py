@@ -1,5 +1,5 @@
 import pandas as pd
-from netmiko import ConnectHandler
+from netmiko import ConnectHandler, NetMikoTimeoutException, NetMikoAuthenticationException
 from getpass import getpass
 
 def read_devices(file_path):
@@ -25,8 +25,12 @@ def connect_and_execute_commands(host, username, password, enable_password, comm
             for command in commands:
                 output = net_connect.send_command(command)
                 print(f"Output from {host} for command '{command}':\n{output}\n")
+    except NetMikoTimeoutException:
+        print(f"Connection timed out for device {host}")
+    except NetMikoAuthenticationException:
+        print(f"Authentication failed for device {host}")
     except Exception as e:
-        print(f"Failed to connect or execute commands on {host}: {e}")
+        print(f"An error occurred with device {host}: {e}")
 
 def main():
     # User credentials input
