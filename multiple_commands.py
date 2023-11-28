@@ -5,10 +5,14 @@ from netmiko import ConnectHandler, NetmikoAuthenticationException, NetmikoTimeo
 # Prompt for file paths
 switches_csv = input("Enter the path to the CSV file with switch hostnames: ")
 commands_csv = input("Enter the path to the CSV file with commands: ")
+output_file = "failed_switches.txt"  # File to store failed switch hostnames
 
 # Prompt for username and password
 username = input("Enter your SSH username: ")
 password = getpass.getpass("Enter your SSH/Enable password: ")
+
+# List to keep track of failed switches
+failed_switches = []
 
 # Function to read hostnames from a CSV file
 def read_hostnames(filename):
@@ -37,7 +41,8 @@ def run_commands_on_switch(hostname, commands):
         'host': hostname,
         'username': username,
         'password': password,
-        'secret': password  # using the same password for enable mode
+        'secret': password,  # using the same password for enable mode
+        'global_delay_factor': 2  # Adjust this as needed
     }
 
     try:
@@ -45,14 +50,22 @@ def run_commands_on_switch(hostname, commands):
             print(f"Connected to {hostname}")
             connection.enable()  # entering enable mode
             for command in commands:
-                output = connection.send_command(command)
-                print(f'Output for {command} on {hostname}:\n{output}\n')
-    except NetmikoAuthenticationException:
-        print(f"Authentication failed for {hostname}. Check username/password.")
-    except NetmikoTimeoutException:
-        print(f"Connection timed out for {hostname}. Check hostname and network connectivity.")
+                try:
+                    output = connection.send_command(command, delay_factor=2)  # Adjust delay_factor as needed
+                    print(f'Output for {command} on {hostname}:\n{output}\n')
+                except Exception as cmd_e:
+                    print(f"Error executing command '{command}' on {hostname}: {cmd_e}")
+                    failed_switches.append(hostname)
+                    break  # Stop executing further commands on this switch
     except Exception as e:
-        print(f"An unexpected error occurred with {hostname}: {e}")
+        print(f"Error with {hostname}: {e}")
+        failed_switches.append(hostname)
+
+# Function to write failed switches to a file
+def write_failed_switches(filename, switches):
+    with open(filename, 'w') as file:
+        for switch in switches:
+            file.write(switch + '\n')
 
 # Main script
 def main():
@@ -69,6 +82,10 @@ def main():
     for switch in switches:
         print(f"Processing {switch}...")
         run_commands_on_switch(switch, commands)
+
+    if failed_switches:
+        write_failed_switches(output_file, failed_switches)
+        print(f"Failed switches written to {output_file}")
 
     print("Script execution completed.")
 
