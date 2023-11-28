@@ -1,14 +1,15 @@
 import pandas as pd
 
-# Step 1: Read from an Excel file
-def read_excel(file_path, column_names):
-    df = pd.read_excel(file_path)
+# Step 1: Read from an Excel file from a specific tab
+def read_excel(file_path, sheet_name, column_names):
+    df = pd.read_excel(file_path, sheet_name=sheet_name)
     return df[column_names]
 
-# Step 2: Create a CSV file with hostnames
-def create_hostname_csv(data, output_file):
-    hostnames = data['hostname'].unique()  # Assuming 'hostname' is one of the columns
-    pd.DataFrame(hostnames, columns=['hostname']).to_csv(output_file, index=False)
+# Step 2: Create a CSV file with combined data as hostnames
+def create_hostname_csv(data, column_names, output_file):
+    # Combine the columns into one and name it 'Hostname'
+    data['Hostname'] = data[column_names].astype(str).agg(' '.join, axis=1)
+    data[['Hostname']].to_csv(output_file, index=False)
 
 # Step 3: Read commands from a CSV file
 def read_commands(file_path):
@@ -24,13 +25,15 @@ def execute_commands(hostnames, commands):
 
 # Main execution
 excel_file_path = 'path_to_your_excel_file.xlsx'
+sheet_name = 'your_sheet_name'  # Replace with your Excel sheet name
 commands_file_path = 'path_to_your_commands_file.csv'
 hostname_csv_output = 'hostnames.csv'
+column_names = ['ColumnA', 'ColumnB']  # Replace with your actual column names
 
-excel_data = read_excel(excel_file_path, ['hostname', 'another_column'])  # Replace 'another_column' as needed
-create_hostname_csv(excel_data, hostname_csv_output)
+excel_data = read_excel(excel_file_path, sheet_name, column_names)
+create_hostname_csv(excel_data, column_names, hostname_csv_output)
 
-hostnames = pd.read_csv(hostname_csv_output)['hostname'].tolist()
+hostnames = pd.read_csv(hostname_csv_output)['Hostname'].tolist()
 commands = read_commands(commands_file_path)
 
 execute_commands(hostnames, commands)
